@@ -18,10 +18,14 @@ namespace DLLInject
     {
 
         [DllImport("kernel32.dll")]
-        public static extern int CreateRemoteThread(IntPtr hwnd, int attrib, int size, IntPtr address, IntPtr par, int flags, int threadid);
+        public static extern IntPtr CreateRemoteThread(IntPtr hwnd, int attrib, int size, IntPtr address, IntPtr par, int flags,out int threadid);
 
         [DllImport("kernel32.dll")]
         public static extern IntPtr GetProcAddress(IntPtr hwnd, string lpname);
+        [DllImport("kernel32.dll")]
+        public static extern int WaitForSingleObject(IntPtr hwnd, int dwMilliseconds);
+        [DllImport("kernel32.dll")]
+        public static extern bool GetExitCodeThread(IntPtr hwnd,out IntPtr lpExitCode);
 
         InIFile config;
         string[] args;
@@ -74,6 +78,19 @@ namespace DLLInject
             }
         }
 
+        //判断鼠标右键
+        private void button1_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Right)
+            {
+                if (MessageBox.Show("是否要从目标进程中卸载该dll", "", MessageBoxButtons.OKCancel,MessageBoxIcon.Warning) == DialogResult.OK)
+                {
+                    UnInject();
+                    MessageBox.Show("已经尝试卸载dll");
+                }
+            }
+        }
+
         //注入处理函数
         void Inject()
         {
@@ -106,7 +123,7 @@ namespace DLLInject
                     //byte[] dllpath = Encoding.ASCII.GetBytes(label1.Text);
                     byte[] dllpath = Encoding.Default.GetBytes(label1.Text);
                     Address.WriteValue_bytes(applyptr, dllpath, hProcess);
-                    if (CreateRemoteThread(hProcess, 0, 0, GetProcAddress(Address.GetModuleHandleA("Kernel32"), "LoadLibraryA"), applyptr, 0, 0) == 0)
+                    if (CreateRemoteThread(hProcess, 0, 0, GetProcAddress(Address.GetModuleHandleA("Kernel32"), "LoadLibraryA"), applyptr, 0,out int threadid) == IntPtr.Zero)
                     {
                         label2.Text = $"找到进程|{textBox1.Text}|PID:{pid}|创建远程线程失败";
                         Address.CloseHandle(hProcess);
@@ -121,6 +138,70 @@ namespace DLLInject
             catch (Exception e)
             {
 
+                MessageBox.Show(e.Message, "注入错误");
+            }
+
+        }
+
+        //卸载处理函数
+        void UnInject()
+        {
+            try
+            {
+                int pid = Address.GetPid(textBox1.Text);
+                if (pid == 0)
+                {
+                    label2.Text = $"未找到和{textBox1.Text}有关的程序";
+                }
+                else
+                {
+                    label2.Text = $"找到进程|{textBox1.Text}|PID:{pid}|尝试卸载...";
+                    IntPtr hProcess = Address.OpenProcess(0x1F0FFF, false, pid);
+                    if (hProcess == IntPtr.Zero)
+                    {
+                        label2.Text = $"找到进程|{textBox1.Text}|PID:{pid}|创建进程句柄失败";
+                        Address.CloseHandle(hProcess);
+                        return;
+                    }
+                    string dllStrName = Path.GetFileName(label1.Text);
+                    IntPtr applyptr = Address.VirtualAllocEx(hProcess, IntPtr.Zero, dllStrName.Length + 1, Address.MEM_COMMIT | Address.MEM_RESERVE, Address.PAGE_READWRITE);
+                    if (applyptr == IntPtr.Zero)
+                    {
+                        label2.Text = $"找到进程|{textBox1.Text}|PID:{pid}|申请一段内存失败";
+                        Address.CloseHandle(hProcess);
+                        return;
+                    }
+
+                    //byte[] dllpath = Encoding.ASCII.GetBytes(label1.Text);
+                    byte[] dllname = Encoding.Default.GetBytes(dllStrName);
+                    Address.WriteValue_bytes(applyptr, dllname, hProcess);
+                    IntPtr Thread = CreateRemoteThread(hProcess, 0, 0, GetProcAddress(Address.GetModuleHandleA("Kernel32"), "GetModuleHandleA"), applyptr, 0, out int threadid);
+                    if (Thread == IntPtr.Zero)
+                    {
+                        label2.Text = $"找到进程|{textBox1.Text}|PID:{pid}|创建远程线程A失败";
+                        Address.CloseHandle(hProcess);
+                        return;
+                    }
+                    WaitForSingleObject(Thread, int.MaxValue);
+                    GetExitCodeThread(Thread, out IntPtr ExitCode);
+                    Address.CloseHandle(Thread);
+
+                    IntPtr ThreadFree = CreateRemoteThread(hProcess, 0, 0, GetProcAddress(Address.GetModuleHandleA("Kernel32"), "FreeLibrary"), ExitCode, 0, out int threadidfree);
+                    if (Thread == IntPtr.Zero)
+                    {
+                        label2.Text = $"找到进程|{textBox1.Text}|PID:{pid}|创建远程线程B失败";
+                        Address.CloseHandle(hProcess);
+                        return;
+                    }
+
+                    //这里不要释放  不要释放，你刚启动线程就释放了，你怎么知道人家有没有开始读取
+                    //Address.VirtualFreeEx(hProcess,applyptr,0,Address.MEM_RELEASE);
+                    Address.CloseHandle(hProcess);
+                    label2.Text = $"找到进程|{textBox1.Text}|PID:{pid}|卸载成功";
+                }
+            }
+            catch (Exception e)
+            {
                 MessageBox.Show(e.Message, "注入错误");
             }
 

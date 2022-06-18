@@ -120,15 +120,29 @@ namespace DLLInject
                         return;
                     }
 
-                    //byte[] dllpath = Encoding.ASCII.GetBytes(label1.Text);
-                    byte[] dllpath = Encoding.Default.GetBytes(label1.Text);
-                    Address.WriteValue_bytes(applyptr, dllpath, hProcess);
-                    if (CreateRemoteThread(hProcess, 0, 0, GetProcAddress(Address.GetModuleHandleA("Kernel32"), "LoadLibraryA"), applyptr, 0,out int threadid) == IntPtr.Zero)
+                    if (CheckExistUnicode(label1.Text))
                     {
-                        label2.Text = $"找到进程|{textBox1.Text}|PID:{pid}|创建远程线程失败";
-                        Address.CloseHandle(hProcess);
-                        return;
+                        byte[] dllpath = Encoding.Unicode.GetBytes(label1.Text);
+                        Address.WriteValue_bytes(applyptr, dllpath, hProcess);
+                        if (CreateRemoteThread(hProcess, 0, 0, GetProcAddress(Address.GetModuleHandleA("Kernel32"), "LoadLibraryW"), applyptr, 0, out int threadid) == IntPtr.Zero)
+                        {
+                            label2.Text = $"找到进程|{textBox1.Text}|PID:{pid}|创建远程线程失败";
+                            Address.CloseHandle(hProcess);
+                            return;
+                        }
                     }
+                    else
+                    {
+                        byte[] dllpath = Encoding.Default.GetBytes(label1.Text);
+                        Address.WriteValue_bytes(applyptr, dllpath, hProcess);
+                        if (CreateRemoteThread(hProcess, 0, 0, GetProcAddress(Address.GetModuleHandleA("Kernel32"), "LoadLibraryA"), applyptr, 0, out int threadid) == IntPtr.Zero)
+                        {
+                            label2.Text = $"找到进程|{textBox1.Text}|PID:{pid}|创建远程线程失败";
+                            Address.CloseHandle(hProcess);
+                            return;
+                        }
+                    }
+
                     //这里不要释放  不要释放，你刚启动线程就释放了，你怎么知道人家有没有开始读取
                     //Address.VirtualFreeEx(hProcess,applyptr,0,Address.MEM_RELEASE);
                     Address.CloseHandle(hProcess);
@@ -228,6 +242,23 @@ namespace DLLInject
             {
                 e.Effect = DragDropEffects.None;
             }
+        }
+
+        /// <summary>
+        /// 检查字符串是否是 Unicode格式
+        /// </summary>
+        /// <param name="strInput"></param>
+        /// <returns></returns>
+        public bool CheckExistUnicode(string strInput)
+        {
+            int i = strInput.Length;
+            if (i == 0)
+                return false;
+            int j = System.Text.Encoding.Default.GetBytes(strInput).Length;
+            if (i != j)
+                return true;
+            else
+                return false;
         }
     }
 }

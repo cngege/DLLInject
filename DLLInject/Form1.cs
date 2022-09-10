@@ -11,6 +11,7 @@ using System.IO;
 using Tools.Address;
 using Tools.Fileoperate;
 using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 
 namespace DLLInject
 {
@@ -216,7 +217,7 @@ namespace DLLInject
             }
             catch (Exception e)
             {
-                MessageBox.Show(e.Message, "注入错误");
+                MessageBox.Show(e.Message, "远程卸载错误");
             }
 
         }
@@ -259,6 +260,58 @@ namespace DLLInject
                 return true;
             else
                 return false;
+        }
+
+        private void InjectToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            Inject();
+
+        }
+
+        private void LoadDllFileToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            button2_Click(null, null);
+        }
+
+        private void UnInjectToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (MessageBox.Show("是否要从目标进程中卸载该dll", "", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) == DialogResult.OK)
+            {
+                UnInject();
+                MessageBox.Show("已经尝试卸载dll");
+            }
+        }
+
+        private void ExitToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            Application.Exit();
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            if(m.WParam.ToInt64() == 0xF020)                //最小化
+            {
+                this.Hide();
+                return;
+            }
+            base.WndProc(ref m);
+        }
+
+        //点击托盘图标
+        private void notifyIcon1_Click(object sender, EventArgs e)
+        {
+            var Mouseevent = (MouseEventArgs)e;
+            if(Mouseevent.Button == MouseButtons.Left)
+            {
+                if (this.Visible)
+                {
+                    this.Hide();
+                }
+                else
+                {
+                    this.Show();
+                }
+            }
         }
     }
 }

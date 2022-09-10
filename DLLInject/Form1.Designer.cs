@@ -29,12 +29,20 @@ namespace DLLInject
         /// </summary>
         private void InitializeComponent()
         {
+            this.components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
             this.button1 = new System.Windows.Forms.Button();
             this.button2 = new System.Windows.Forms.Button();
             this.textBox1 = new System.Windows.Forms.TextBox();
             this.label1 = new System.Windows.Forms.Label();
             this.label2 = new System.Windows.Forms.Label();
+            this.notifyIcon1 = new System.Windows.Forms.NotifyIcon(this.components);
+            this.contextMenuStrip1 = new System.Windows.Forms.ContextMenuStrip(this.components);
+            this.InjectToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.LoadDllFileToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.UnInjectToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.ExitToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.contextMenuStrip1.SuspendLayout();
             this.SuspendLayout();
             // 
             // button1
@@ -87,6 +95,52 @@ namespace DLLInject
             this.label2.Text = "未发现被注入程序";
             this.label2.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
+            // notifyIcon1
+            // 
+            this.notifyIcon1.ContextMenuStrip = this.contextMenuStrip1;
+            this.notifyIcon1.Icon = ((System.Drawing.Icon)(resources.GetObject("notifyIcon1.Icon")));
+            this.notifyIcon1.Text = "PalletsIcon";
+            this.notifyIcon1.Visible = true;
+            this.notifyIcon1.Click += new System.EventHandler(this.notifyIcon1_Click);
+            // 
+            // contextMenuStrip1
+            // 
+            this.contextMenuStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.InjectToolStripMenuItem,
+            this.LoadDllFileToolStripMenuItem,
+            this.UnInjectToolStripMenuItem,
+            this.ExitToolStripMenuItem});
+            this.contextMenuStrip1.Name = "contextMenuStrip1";
+            this.contextMenuStrip1.Size = new System.Drawing.Size(101, 92);
+            // 
+            // InjectToolStripMenuItem
+            // 
+            this.InjectToolStripMenuItem.Name = "InjectToolStripMenuItem";
+            this.InjectToolStripMenuItem.Size = new System.Drawing.Size(100, 22);
+            this.InjectToolStripMenuItem.Text = "注入";
+            this.InjectToolStripMenuItem.Click += new System.EventHandler(this.InjectToolStripMenuItem_Click);
+            // 
+            // LoadDllFileToolStripMenuItem
+            // 
+            this.LoadDllFileToolStripMenuItem.Name = "LoadDllFileToolStripMenuItem";
+            this.LoadDllFileToolStripMenuItem.Size = new System.Drawing.Size(100, 22);
+            this.LoadDllFileToolStripMenuItem.Text = "载入";
+            this.LoadDllFileToolStripMenuItem.Click += new System.EventHandler(this.LoadDllFileToolStripMenuItem_Click);
+            // 
+            // UnInjectToolStripMenuItem
+            // 
+            this.UnInjectToolStripMenuItem.Name = "UnInjectToolStripMenuItem";
+            this.UnInjectToolStripMenuItem.Size = new System.Drawing.Size(100, 22);
+            this.UnInjectToolStripMenuItem.Text = "卸载";
+            this.UnInjectToolStripMenuItem.Click += new System.EventHandler(this.UnInjectToolStripMenuItem_Click);
+            // 
+            // ExitToolStripMenuItem
+            // 
+            this.ExitToolStripMenuItem.Name = "ExitToolStripMenuItem";
+            this.ExitToolStripMenuItem.Size = new System.Drawing.Size(100, 22);
+            this.ExitToolStripMenuItem.Text = "退出";
+            this.ExitToolStripMenuItem.Click += new System.EventHandler(this.ExitToolStripMenuItem_Click);
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 17F);
@@ -99,13 +153,13 @@ namespace DLLInject
             this.Controls.Add(this.button1);
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.MaximizeBox = false;
-            this.MinimizeBox = false;
             this.Name = "Form1";
             this.ShowInTaskbar = false;
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "DLL注入器";
             this.TopMost = true;
             this.Load += new System.EventHandler(this.Form1_Load);
+            this.contextMenuStrip1.ResumeLayout(false);
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -118,6 +172,12 @@ namespace DLLInject
         private System.Windows.Forms.TextBox textBox1;
         private System.Windows.Forms.Label label1;
         private System.Windows.Forms.Label label2;
+        private System.Windows.Forms.NotifyIcon notifyIcon1;
+        private System.Windows.Forms.ContextMenuStrip contextMenuStrip1;
+        private System.Windows.Forms.ToolStripMenuItem InjectToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem LoadDllFileToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem UnInjectToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem ExitToolStripMenuItem;
     }
 }
 

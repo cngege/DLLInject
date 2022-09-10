@@ -40,7 +40,14 @@ namespace DLLInject
         {
             this.MinimumSize = this.Size;
             this.MaximumSize = this.Size;
-            config = new InIFile(Application.StartupPath + "config.ini");
+            if(File.Exists(Application.StartupPath + "config.ini"))
+            {
+                config = new InIFile(Application.StartupPath + "config.ini");
+            }
+            else
+            {
+                config = new InIFile(System.Environment.GetEnvironmentVariable("TEMP") + "/config.ini");
+            }
             textBox1.Text = config.Read("Inject","Filename","Minecraft.Windows");
             label1.Text = config.Read("DLLPath","PATH","未选择DLL");
             if(args.Length >= 1)

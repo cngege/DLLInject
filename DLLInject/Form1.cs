@@ -14,6 +14,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using System.Diagnostics;
 using System.Threading;
+using System.Security.AccessControl;
 
 namespace DLLInject
 {
@@ -113,6 +114,9 @@ namespace DLLInject
                 }
                 else
                 {
+                    // 检查是否是UWP程序
+                    CheckUWP(Process.GetProcessById(pid).MainModule.FileName, label1.Text);
+
                     label2.Text = $"找到进程|PID:{pid}|尝试注入...";
                     IntPtr hProcess = Address.OpenProcess(0x1F0FFF, false, pid);
                     if (hProcess == IntPtr.Zero)
@@ -273,6 +277,20 @@ namespace DLLInject
             {
                 label1.Text = path;
                 config.Write("DLLPath", "PATH", path);
+            }
+        }
+
+
+        void CheckUWP(string exePath, string dllPath)
+        {
+            //C:\Program Files\WindowsApps\Microsoft.MinecraftUWP_1.20.1201.0_x64__8wekyb3d8bbwe
+            if(exePath.IndexOf("\\WindowsApps\\") > 0)
+            {
+                // 是UWP程序
+                FileInfo fileInfo = new FileInfo(dllPath);
+                var fileSecurity = fileInfo.GetAccessControl();
+                fileSecurity.AddAccessRule(new FileSystemAccessRule("ALL APPLICATION PACKAGES", FileSystemRights.FullControl, AccessControlType.Allow));
+                fileInfo.SetAccessControl(fileSecurity);
             }
         }
 

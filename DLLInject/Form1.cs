@@ -22,17 +22,20 @@ namespace DLLInject
     {
 
         [DllImport("kernel32.dll")]
-        public static extern IntPtr CreateRemoteThread(IntPtr hwnd, int attrib, int size, IntPtr address, IntPtr par, int flags,out int threadid);
+        private static extern IntPtr CreateRemoteThread(IntPtr hwnd, int attrib, int size, IntPtr address, IntPtr par, int flags,out int threadid);
 
         [DllImport("kernel32.dll")]
-        public static extern IntPtr GetProcAddress(IntPtr hwnd, string lpname);
+        private static extern IntPtr GetProcAddress(IntPtr hwnd, string lpname);
         [DllImport("kernel32.dll")]
-        public static extern int WaitForSingleObject(IntPtr hwnd, int dwMilliseconds);
+        private static extern int WaitForSingleObject(IntPtr hwnd, int dwMilliseconds);
         [DllImport("kernel32.dll")]
-        public static extern bool GetExitCodeThread(IntPtr hwnd,out IntPtr lpExitCode);
+        private static extern bool GetExitCodeThread(IntPtr hwnd,out IntPtr lpExitCode);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, CallingConvention = CallingConvention.StdCall)]
+        private static extern long GetLastError();
 
         InIFile config;
-        string[] args;
+        readonly string[] args;
         public Form1(string[] args)
         {
             this.args = args;
@@ -66,7 +69,7 @@ namespace DLLInject
         //选择DLL
         private void button2_Click(object sender, EventArgs e)
         {
-            OpenFileDialog loadFile = new OpenFileDialog();
+            var loadFile = new OpenFileDialog();
             loadFile.Filter = "所有DLL文件|*.dll";//设置文件类型
             loadFile.Title = "选择要注入的dll";//设置标题
             //loadFile.AddExtension = true;//是否自动增加所辍名
@@ -145,7 +148,7 @@ namespace DLLInject
                             Address.CloseHandle(hProcess);
                             return;
                         }
-                        WaitForSingleObject(Thread_LLW, int.MaxValue);
+                        _ = WaitForSingleObject(Thread_LLW, int.MaxValue);
                         if (!GetExitCodeThread(Thread_LLW, out IntPtr ExitCode))
                         {
                             label2.Text = $"找到进程|PID:{pid}|获取退出代码失败";
@@ -156,12 +159,14 @@ namespace DLLInject
                         {
                             label2.Text = $"找到进程|PID:{pid}|远程调用LoadLibraryW错误";
                             Address.CloseHandle(hProcess);
+                            MessageBox.Show("GetLastError :" + GetLastError());
                             return;
                         }
                     }
                     else
                     {
-                        byte[] dllpath = Encoding.Default.GetBytes(label1.Text);
+                        //byte[] dllpath = Encoding.Default.GetBytes(label1.Text);
+                        byte[] dllpath = Encoding.UTF8.GetBytes(label1.Text);
                         IntPtr applyptr = Address.VirtualAllocEx(hProcess, IntPtr.Zero, dllpath.Length + 1, Address.MEM_COMMIT | Address.MEM_RESERVE, Address.PAGE_READWRITE);
                         if (applyptr == IntPtr.Zero)
                         {
@@ -177,7 +182,7 @@ namespace DLLInject
                             Address.CloseHandle(hProcess);
                             return;
                         }
-                        WaitForSingleObject(Thread_LLA, int.MaxValue);
+                        _ = WaitForSingleObject(Thread_LLA, int.MaxValue);
                         if (!GetExitCodeThread(Thread_LLA, out IntPtr ExitCode))
                         {
                             label2.Text = $"找到进程|PID:{pid}|获取退出代码失败";
@@ -188,6 +193,7 @@ namespace DLLInject
                         {
                             label2.Text = $"找到进程|PID:{pid}|远程调用LoadLibraryA错误";
                             Address.CloseHandle(hProcess);
+                            MessageBox.Show("GetLastError :" + GetLastError());
                             return;
                         }
                     }
@@ -243,7 +249,7 @@ namespace DLLInject
                         return;
                     }
 
-                    WaitForSingleObject(ThreadFree, int.MaxValue);
+                    _ = WaitForSingleObject(ThreadFree, int.MaxValue);
                     if (!GetExitCodeThread(ThreadFree, out IntPtr ExitCode_Free))
                     {
                         label2.Text = $"找到进程|PID:{pid}|无法获得线程退出代码";
@@ -280,8 +286,7 @@ namespace DLLInject
             }
         }
 
-
-        void CheckUWP(string exePath, string dllPath)
+        static void CheckUWP(string exePath, string dllPath)
         {
             //C:\Program Files\WindowsApps\Microsoft.MinecraftUWP_1.20.1201.0_x64__8wekyb3d8bbwe
             if(exePath.IndexOf("\\WindowsApps\\") > 0)
@@ -312,7 +317,7 @@ namespace DLLInject
         /// </summary>
         /// <param name="strInput"></param>
         /// <returns></returns>
-        public bool CheckExistUnicode(string strInput)
+        public static bool CheckExistUnicode(string strInput)
         {
             int i = strInput.Length;
             if (i == 0)

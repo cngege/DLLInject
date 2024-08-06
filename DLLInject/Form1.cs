@@ -1,17 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.IO;
 using Tools.Address;
 using Tools.Fileoperate;
 using System.Runtime.InteropServices;
-using System.Runtime.CompilerServices;
 using System.Diagnostics;
 using System.Threading;
 using System.Security.AccessControl;
@@ -49,19 +42,32 @@ namespace DLLInject
             if(File.Exists(Application.StartupPath + "config.ini"))
             {
                 config = new InIFile(Application.StartupPath + "config.ini");
+                textBox1.Text = config.Read("Main", "Filename", "Minecraft.Windows");
+                label1.Text = config.Read("Main", "PATH", "未选择DLL");
             }
             else
             {
                 config = new InIFile(System.Environment.GetEnvironmentVariable("TEMP") + "/config.ini");
+                //Application.ExecutablePath
+                textBox1.Text = config.Read(Application.ExecutablePath, "Filename", "Minecraft.Windows");
+                label1.Text = config.Read(Application.ExecutablePath, "PATH", "未选择DLL");
             }
-            textBox1.Text = config.Read("Inject","Filename","Minecraft.Windows");
-            label1.Text = config.Read("DLLPath","PATH","未选择DLL");
+            //textBox1.Text = config.Read("Inject","Filename","Minecraft.Windows");
+            //label1.Text = config.Read("DLLPath","PATH","未选择DLL");
             if(args.Length >= 1)
             {
                 if (args[0].ToLower().EndsWith(".dll"))
                 {
                     label1.Text = args[0];
-                    config.Write("DLLPath", "PATH", args[0]);
+                    if (File.Exists(Application.StartupPath + "config.ini"))
+                    {
+                        config.Write("Main", "PATH", args[0]);
+                    }
+                    else
+                    {
+                        config.Write(Application.ExecutablePath, "PATH", args[0]);
+                    }
+                        
                 }
             }
         }
@@ -78,14 +84,28 @@ namespace DLLInject
             if (loadFile.ShowDialog() == DialogResult.OK)
             {
                 label1.Text = loadFile.FileName;
-                config.Write("DLLPath","PATH", loadFile.FileName);
+                if (File.Exists(Application.StartupPath + "config.ini"))
+                {
+                    config.Write("Main", "PATH", loadFile.FileName);
+                }
+                else
+                {
+                    config.Write(Application.ExecutablePath, "PATH", loadFile.FileName);
+                }
             }
         }
 
         //注入 按钮
         private void button1_Click(object sender, EventArgs e)
         {
-            config.Write("Inject", "Filename", textBox1.Text);
+            if (File.Exists(Application.StartupPath + "config.ini"))
+            {
+                config.Write("Main", "Filename", textBox1.Text);
+            }
+            else
+            {
+                config.Write(Application.ExecutablePath, "Filename", textBox1.Text);
+            }
             if (textBox1.Text != "" && File.Exists(label1.Text))
             {
                 Inject();
@@ -282,7 +302,14 @@ namespace DLLInject
             if (path.ToLower().EndsWith(".dll"))
             {
                 label1.Text = path;
-                config.Write("DLLPath", "PATH", path);
+                if (File.Exists(Application.StartupPath + "config.ini"))
+                {
+                    config.Write("Main", "PATH", path);
+                }
+                else
+                {
+                    config.Write(Application.ExecutablePath, "PATH", path);
+                }
             }
         }
 

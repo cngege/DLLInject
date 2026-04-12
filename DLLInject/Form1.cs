@@ -1,124 +1,154 @@
-﻿using System;
-using System.Text;
-using System.Windows.Forms;
+﻿using DLLInject.data;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Security.AccessControl;
+using System.Text;
+using System.Threading;
+using System.Windows.Forms;
 using Tools.Address;
 using Tools.Fileoperate;
-using System.Runtime.InteropServices;
-using System.Diagnostics;
-using System.Threading;
-using System.Security.AccessControl;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace DLLInject
 {
-    public partial class Form1 : Form
-    {
+    public partial class Form1 : Form {
+        public const uint MEM_COMMIT = 0x1000;
+        public const uint MEM_RESERVE = 0x2000;
+        public const uint PAGE_READWRITE = 0x04;
+        // Win32 API声明
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern IntPtr VirtualAllocEx(IntPtr hProcess, IntPtr lpAddress, uint dwSize, uint flAllocationType, uint flProtect);
 
-        [DllImport("kernel32.dll")]
-        private static extern IntPtr CreateRemoteThread(IntPtr hwnd, int attrib, int size, IntPtr address, IntPtr par, int flags,out int threadid);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool WriteProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, byte[] lpBuffer, uint nSize, out uint lpNumberOfBytesWritten);
 
-        [DllImport("kernel32.dll")]
-        private static extern IntPtr GetProcAddress(IntPtr hwnd, string lpname);
-        [DllImport("kernel32.dll")]
-        private static extern int WaitForSingleObject(IntPtr hwnd, int dwMilliseconds);
-        [DllImport("kernel32.dll")]
-        private static extern bool GetExitCodeThread(IntPtr hwnd,out IntPtr lpExitCode);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool CloseHandle(IntPtr hObject);
 
-        [DllImport("kernel32.dll", CharSet = CharSet.Auto, CallingConvention = CallingConvention.StdCall)]
-        private static extern long GetLastError();
+        [DllImport("kernel32.dll", CharSet = CharSet.Ansi, SetLastError = true)]
+        public static extern IntPtr GetModuleHandleA(string lpModuleName);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Ansi, SetLastError = true)]
+        public static extern IntPtr GetProcAddress(IntPtr hModule, string lpProcName);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern IntPtr CreateRemoteThread(IntPtr hProcess, IntPtr lpThreadAttributes, uint dwStackSize, IntPtr lpStartAddress, IntPtr lpParameter, uint dwCreationFlags, out int lpThreadId);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool GetExitCodeThread(IntPtr hThread, out IntPtr lpExitCode);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern uint GetLastError();
+
+        // 封装WriteValue_bytes（补全你缺失的实现）
+        public static bool WriteValue_bytes(IntPtr address, byte[] data, IntPtr hProcess) {
+            return WriteProcessMemory(hProcess, address, data, (uint)data.Length, out _);
+        }
 
         InIFile config;
+        BindingList<FileItem> dll_lists = new();
         readonly string[] args;
-        public Form1(string[] args)
-        {
+
+
+        public Form1(string[] args) {
             this.args = args;
             InitializeComponent();
         }
 
-        private void Form1_Load(object sender, EventArgs e)
-        {
+        private void Form1_Load(object sender, EventArgs e) {
             this.MinimumSize = this.Size;
             this.MaximumSize = this.Size;
-            if(File.Exists(Application.StartupPath + "config.ini"))
-            {
-                config = new InIFile(Application.StartupPath + "config.ini");
+            if (File.Exists(Path.Combine(Application.StartupPath, "config.ini"))) {
+                config = new InIFile(Path.Combine(Application.StartupPath, "config.ini"));
                 textBox1.Text = config.Read("Main", "Filename", "Minecraft.Windows");
                 label1.Text = config.Read("Main", "PATH", "未选择DLL");
-            }
-            else
-            {
-                config = new InIFile(System.Environment.GetEnvironmentVariable("TEMP") + "/config.ini");
+            } else {
+                config = new InIFile(Path.Combine(System.Environment.GetEnvironmentVariable("TEMP"), "config.ini"));
                 //Application.ExecutablePath
                 textBox1.Text = config.Read(Application.ExecutablePath, "Filename", "Minecraft.Windows");
                 label1.Text = config.Read(Application.ExecutablePath, "PATH", "未选择DLL");
             }
-            //textBox1.Text = config.Read("Inject","Filename","Minecraft.Windows");
-            //label1.Text = config.Read("DLLPath","PATH","未选择DLL");
-            if(args.Length >= 1)
-            {
-                if (args[0].ToLower().EndsWith(".dll"))
-                {
-                    label1.Text = args[0];
-                    if (File.Exists(Application.StartupPath + "config.ini"))
-                    {
-                        config.Write("Main", "PATH", args[0]);
+            // 读取列表
+            string lists_ = config.Read(Application.ExecutablePath, "DllLists", "");
+            string select_ = config.Read(Application.ExecutablePath, "CurrentSelect", "0");
+            int select = int.Parse(select_);
+
+            dll_lists = new BindingList<FileItem>(lists_.Split(",").Where(path => !string.IsNullOrWhiteSpace(path)).Select(path => new FileItem(path)).ToList());
+
+            if (args.Length >= 1) {
+                if (args[0].ToLower().EndsWith(".dll")) {
+                    if (!dll_lists.Contains(new FileItem(args[0]))) {
+                        dll_lists.Add(new FileItem(args[0]));
+                        config.Write(Application.ExecutablePath, "DllLists", string.Join(",", dll_lists.Select(item => item.FilePath)));
+                        //更新下拉列表框
                     }
-                    else
-                    {
+                    label1.Text = args[0];
+                    if (File.Exists(Path.Combine(Application.StartupPath, "config.ini"))) {
+                        config.Write("Main", "PATH", args[0]);
+                    } else {
                         config.Write(Application.ExecutablePath, "PATH", args[0]);
                     }
-                        
                 }
+            }
+            combo_box_dll_lists.DataSource = dll_lists;
+            if (select < dll_lists.Count) {
+                combo_box_dll_lists.SelectedIndex = select;
+            } else {
+                combo_box_dll_lists.SelectedIndex = dll_lists.Count - 1;
             }
         }
 
-        //选择DLL
-        private void button2_Click(object sender, EventArgs e)
-        {
+        // 选择按钮点击事件 选择DLL
+        private void button2_Click(object sender, EventArgs e) {
             var loadFile = new OpenFileDialog();
             loadFile.Filter = "所有DLL文件|*.dll";//设置文件类型
             loadFile.Title = "选择要注入的dll";//设置标题
             //loadFile.AddExtension = true;//是否自动增加所辍名
             loadFile.AutoUpgradeEnabled = true;//是否随系统升级而升级外观
             loadFile.Multiselect = false;       //是否可以多选
-            if (loadFile.ShowDialog() == DialogResult.OK)
-            {
+            if (loadFile.ShowDialog() == DialogResult.OK) {
                 label1.Text = loadFile.FileName;
-                if (File.Exists(Application.StartupPath + "config.ini"))
-                {
+                if (File.Exists(Path.Combine(Application.StartupPath, "config.ini"))) {
                     config.Write("Main", "PATH", loadFile.FileName);
-                }
-                else
-                {
+                } else {
                     config.Write(Application.ExecutablePath, "PATH", loadFile.FileName);
                 }
+                var index = dll_lists.ToList().FindIndex(item => item.FilePath == loadFile.FileName);
+                if (index == -1) {
+                    index = dll_lists.Count;
+                    dll_lists.Add(new FileItem(loadFile.FileName));
+                    config.Write(Application.ExecutablePath, "DllLists", string.Join(",", dll_lists.Select(item => item.FilePath)));
+                }
+                if (dll_lists.Count > 0) combo_box_dll_lists.SelectedIndex = index;
+                config.Write(Application.ExecutablePath, "CurrentSelect", index.ToString());
             }
         }
 
         //注入 按钮
-        private void button1_Click(object sender, EventArgs e)
-        {
-            if (File.Exists(Application.StartupPath + "config.ini"))
-            {
+        private void button1_Click(object sender, EventArgs e) {
+            if (File.Exists(Path.Combine(Application.StartupPath, "config.ini"))) {
                 config.Write("Main", "Filename", textBox1.Text);
-            }
-            else
-            {
+            } else {
                 config.Write(Application.ExecutablePath, "Filename", textBox1.Text);
             }
-            if (textBox1.Text != "" && File.Exists(label1.Text))
-            {
+            if (textBox1.Text != "" && File.Exists(label1.Text)) {
                 Inject();
             }
         }
 
         //判断鼠标右键
-        private void button1_MouseDown(object sender, MouseEventArgs e)
-        {
-            if (e.Button == MouseButtons.Right)
-            {
-                if (MessageBox.Show("是否要从目标进程中卸载该dll", "", MessageBoxButtons.OKCancel,MessageBoxIcon.Warning) == DialogResult.OK)
-                {
+        private void button1_MouseDown(object sender, MouseEventArgs e) {
+            if (e.Button == MouseButtons.Right) {
+                if (MessageBox.Show("是否要从目标进程中卸载该dll", "", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) == DialogResult.OK) {
                     UnInject();
                     MessageBox.Show("已经尝试卸载dll");
                 }
@@ -126,91 +156,80 @@ namespace DLLInject
         }
 
         //注入处理函数
-        void Inject()
-        {
-            try
-            {
+        void Inject() {
+            try {
                 int pid = Address.GetPid(textBox1.Text);
-                if (pid == 0)
-                {
+                if (pid == 0) {
                     label2.Text = $"未找到和{textBox1.Text}有关的程序";
-                }
-                else
-                {
+                } else {
                     // 检查是否是UWP程序
                     CheckUWP(Process.GetProcessById(pid).MainModule.FileName, label1.Text);
 
                     label2.Text = $"找到进程|PID:{pid}|尝试注入...";
                     IntPtr hProcess = Address.OpenProcess(0x1F0FFF, false, pid);
-                    if (hProcess == IntPtr.Zero)
-                    {
-                        label2.Text = $"找到进程|PID:{pid}|创建进程句柄失败";
+                    if (hProcess == IntPtr.Zero) {
+                        label2.Text = $"找到进程|PID:{pid}|错误码:{GetLastError()}";
                         Address.CloseHandle(hProcess);
                         return;
                     }
 
 
-                    if (CheckExistUnicode(label1.Text))
-                    {
+                    if (CheckExistUnicode(label1.Text)) {
                         byte[] dllpath = Encoding.Unicode.GetBytes(label1.Text);
                         IntPtr applyptr = Address.VirtualAllocEx(hProcess, IntPtr.Zero, dllpath.Length + 1, Address.MEM_COMMIT, Address.PAGE_READWRITE);
-                        if (applyptr == IntPtr.Zero)
-                        {
+                        if (applyptr == IntPtr.Zero) {
                             label2.Text = $"找到进程|PID:{pid}|申请一段内存失败";
                             Address.CloseHandle(hProcess);
                             return;
                         }
                         Address.WriteValue_bytes(applyptr, dllpath, hProcess);
-                        IntPtr Thread_LLW = CreateRemoteThread(hProcess, 0, 0, GetProcAddress(Address.GetModuleHandleA("Kernel32"), "LoadLibraryW"), applyptr, 0, out int threadid);
-                        if (Thread_LLW == IntPtr.Zero)
-                        {
+                        IntPtr Thread_LLW = CreateRemoteThread(hProcess, IntPtr.Zero, 0, GetProcAddress(Address.GetModuleHandleA("Kernel32"), "LoadLibraryW"), applyptr, 0, out int threadid);
+                        if (Thread_LLW == IntPtr.Zero) {
                             label2.Text = $"找到进程|PID:{pid}|创建远程线程失败";
                             Address.CloseHandle(hProcess);
                             return;
                         }
                         _ = WaitForSingleObject(Thread_LLW, int.MaxValue);
-                        if (!GetExitCodeThread(Thread_LLW, out IntPtr ExitCode))
-                        {
+                        if (!GetExitCodeThread(Thread_LLW, out IntPtr ExitCode)) {
                             label2.Text = $"找到进程|PID:{pid}|获取退出代码失败";
                             Address.CloseHandle(hProcess);
                             return;
                         }
-                        if (ExitCode == IntPtr.Zero)
-                        {
+                        if (ExitCode == IntPtr.Zero) {
                             label2.Text = $"找到进程|PID:{pid}|远程调用LoadLibraryW错误";
                             Address.CloseHandle(hProcess);
                             MessageBox.Show("GetLastError :" + GetLastError());
                             return;
                         }
-                    }
-                    else
-                    {
+                    } else {
                         //byte[] dllpath = Encoding.Default.GetBytes(label1.Text);
-                        byte[] dllpath = Encoding.UTF8.GetBytes(label1.Text);
-                        IntPtr applyptr = Address.VirtualAllocEx(hProcess, IntPtr.Zero, dllpath.Length + 1, Address.MEM_COMMIT | Address.MEM_RESERVE, Address.PAGE_READWRITE);
-                        if (applyptr == IntPtr.Zero)
-                        {
-                            label2.Text = $"找到进程|PID:{pid}|申请一段内存失败";
+                        byte[] dllpath = Encoding.UTF8.GetBytes(label1.Text.Trim());
+
+                        byte[] dllPathWithNull = new byte[dllpath.Length + 1];
+                        Array.Copy(dllpath, dllPathWithNull, dllpath.Length);
+                        dllPathWithNull[dllpath.Length] = 0;
+
+                        IntPtr applyptr = Address.VirtualAllocEx(hProcess, IntPtr.Zero, dllPathWithNull.Length, Address.MEM_COMMIT | Address.MEM_RESERVE, Address.PAGE_READWRITE);
+                        if (applyptr == IntPtr.Zero) {
+                            label2.Text = $"找到进程|PID:{pid}|申请一段内存失败|错误码:{GetLastError()}";
                             Address.CloseHandle(hProcess);
                             return;
                         }
-                        Address.WriteValue_bytes(applyptr, dllpath, hProcess);
-                        IntPtr Thread_LLA = CreateRemoteThread(hProcess, 0, 0, GetProcAddress(Address.GetModuleHandleA("Kernel32"), "LoadLibraryA"), applyptr, 0, out int threadid);
-                        if (Thread_LLA == IntPtr.Zero)
-                        {
+
+                        Address.WriteValue_bytes(applyptr, dllPathWithNull, hProcess);
+                        IntPtr Thread_LLA = CreateRemoteThread(hProcess, IntPtr.Zero, 0, GetProcAddress(Address.GetModuleHandleA("Kernel32"), "LoadLibraryA"), applyptr, 0, out int threadid);
+                        if (Thread_LLA == IntPtr.Zero) {
                             label2.Text = $"找到进程|PID:{pid}|创建远程线程失败";
                             Address.CloseHandle(hProcess);
                             return;
                         }
                         _ = WaitForSingleObject(Thread_LLA, int.MaxValue);
-                        if (!GetExitCodeThread(Thread_LLA, out IntPtr ExitCode))
-                        {
+                        if (!GetExitCodeThread(Thread_LLA, out IntPtr ExitCode)) {
                             label2.Text = $"找到进程|PID:{pid}|获取退出代码失败";
                             Address.CloseHandle(hProcess);
                             return;
                         }
-                        if (ExitCode == IntPtr.Zero)
-                        {
+                        if (ExitCode == IntPtr.Zero) {
                             label2.Text = $"找到进程|PID:{pid}|远程调用LoadLibraryA错误";
                             Address.CloseHandle(hProcess);
                             MessageBox.Show("GetLastError :" + GetLastError());
@@ -223,9 +242,7 @@ namespace DLLInject
                     Address.CloseHandle(hProcess);
                     label2.Text = $"找到进程|PID:{pid}|注入成功";
                 }
-            }
-            catch (Exception e)
-            {
+            } catch (Exception e) {
 
                 MessageBox.Show(e.Message, "注入错误");
             }
@@ -233,21 +250,15 @@ namespace DLLInject
         }
 
         //卸载处理函数
-        void UnInject()
-        {
-            try
-            {
+        void UnInject() {
+            try {
                 int pid = Address.GetPid(textBox1.Text);
-                if (pid == 0)
-                {
+                if (pid == 0) {
                     label2.Text = $"未找到和{textBox1.Text}有关的程序";
-                }
-                else
-                {
+                } else {
                     label2.Text = $"找到进程|PID:{pid}|尝试卸载...";
                     IntPtr hProcess = Address.OpenProcess(0x1F0FFF, false, pid);
-                    if (hProcess == IntPtr.Zero)
-                    {
+                    if (hProcess == IntPtr.Zero) {
                         label2.Text = $"找到进程|PID:{pid}|创建进程句柄失败";
                         Address.CloseHandle(hProcess);
                         return;
@@ -255,29 +266,25 @@ namespace DLLInject
 
                     IntPtr ModulePtr = GetModuleAddr(pid, label1.Text);
 
-                    if (ModulePtr == IntPtr.Zero)
-                    {
+                    if (ModulePtr == IntPtr.Zero) {
                         label2.Text = $"找到进程|PID:{pid}|获取模块地址失败";
                         Address.CloseHandle(hProcess);
                         return;
                     }
-                    IntPtr ThreadFree = CreateRemoteThread(hProcess, 0, 0, GetProcAddress(Address.GetModuleHandleA("Kernel32"), "FreeLibrary"), ModulePtr, 0, out int threadidfree);
-                    if (ThreadFree == IntPtr.Zero)
-                    {
+                    IntPtr ThreadFree = CreateRemoteThread(hProcess, IntPtr.Zero, 0, GetProcAddress(Address.GetModuleHandleA("Kernel32"), "FreeLibrary"), ModulePtr, 0, out int threadidfree);
+                    if (ThreadFree == IntPtr.Zero) {
                         label2.Text = $"找到进程|PID:{pid}|创建远程线程B失败";
                         Address.CloseHandle(hProcess);
                         return;
                     }
 
                     _ = WaitForSingleObject(ThreadFree, int.MaxValue);
-                    if (!GetExitCodeThread(ThreadFree, out IntPtr ExitCode_Free))
-                    {
+                    if (!GetExitCodeThread(ThreadFree, out IntPtr ExitCode_Free)) {
                         label2.Text = $"找到进程|PID:{pid}|无法获得线程退出代码";
                         Address.CloseHandle(hProcess);
                         return;
                     }
-                    if (ExitCode_Free == IntPtr.Zero)
-                    {
+                    if (ExitCode_Free == IntPtr.Zero) {
                         label2.Text = $"找到进程|PID:{pid}|远程调用FreeLibrary错误";
                         Address.CloseHandle(hProcess);
                         return;
@@ -288,36 +295,29 @@ namespace DLLInject
                     Address.CloseHandle(hProcess);
                     label2.Text = $"找到进程|PID:{pid}|卸载成功";
                 }
-            }
-            catch (Exception e)
-            {
+            } catch (Exception e) {
                 MessageBox.Show(e.Message, "远程卸载错误");
             }
 
         }
 
-        private void label1_DragDrop(object sender, DragEventArgs e)
-        {
+        private void label1_DragDrop(object sender, DragEventArgs e) {
             string path = ((System.Array)e.Data.GetData(DataFormats.FileDrop)).GetValue(0).ToString();       //获得路径
-            if (path.ToLower().EndsWith(".dll"))
-            {
+            if (path.ToLower().EndsWith(".dll")) {
                 label1.Text = path;
-                if (File.Exists(Application.StartupPath + "config.ini"))
-                {
+                if (File.Exists(Application.StartupPath + "config.ini")) {
                     config.Write("Main", "PATH", path);
-                }
-                else
-                {
+                } else {
                     config.Write(Application.ExecutablePath, "PATH", path);
                 }
+                dll_lists.Add(new FileItem(path));
+                config.Write(Application.ExecutablePath, "DllLists", string.Join(",", dll_lists));
             }
         }
 
-        static void CheckUWP(string exePath, string dllPath)
-        {
+        static void CheckUWP(string exePath, string dllPath) {
             //C:\Program Files\WindowsApps\Microsoft.MinecraftUWP_1.20.1201.0_x64__8wekyb3d8bbwe
-            if(exePath.IndexOf("\\WindowsApps\\") > 0)
-            {
+            if (exePath.IndexOf("\\WindowsApps\\") > 0) {
                 // 是UWP程序
                 FileInfo fileInfo = new FileInfo(dllPath);
                 var fileSecurity = fileInfo.GetAccessControl();
@@ -326,15 +326,11 @@ namespace DLLInject
             }
         }
 
-        private void label1_DragEnter(object sender, DragEventArgs e)
-        {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
-            {
+        private void label1_DragEnter(object sender, DragEventArgs e) {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop)) {
                 string path = ((System.Array)e.Data.GetData(DataFormats.FileDrop)).GetValue(0).ToString();       //获得路径
                 if (path.ToLower().EndsWith(".dll")) e.Effect = DragDropEffects.Link;
-            }
-            else
-            {
+            } else {
                 e.Effect = DragDropEffects.None;
             }
         }
@@ -344,8 +340,7 @@ namespace DLLInject
         /// </summary>
         /// <param name="strInput"></param>
         /// <returns></returns>
-        public static bool CheckExistUnicode(string strInput)
-        {
+        public static bool CheckExistUnicode(string strInput) {
             int i = strInput.Length;
             if (i == 0)
                 return false;
@@ -362,13 +357,10 @@ namespace DLLInject
         /// <param name="pid">进程PID</param>
         /// <param name="path">模块路径名,或单独的名字</param>
         /// <returns></returns>
-        public static IntPtr GetModuleAddr(int pid, string path)
-        {
+        public static IntPtr GetModuleAddr(int pid, string path) {
             Process processById = Process.GetProcessById(pid);      // 如果没有这样的一个进程 则抛出一个异常
-            for (int i = 0; i < processById.Modules.Count; i++)
-            {
-                if (processById.Modules[i].FileName == path || processById.Modules[i].ModuleName == path)
-                {
+            for (int i = 0; i < processById.Modules.Count; i++) {
+                if (processById.Modules[i].FileName == path || processById.Modules[i].ModuleName == path) {
                     return processById.Modules[i].BaseAddress;
                 }
             }
@@ -376,33 +368,28 @@ namespace DLLInject
             return IntPtr.Zero;
         }
 
-        private void InjectToolStripMenuItem_Click(object sender, EventArgs e)
-        {
+        // 托盘右键菜单，注入按钮事件
+        private void InjectToolStripMenuItem_Click(object sender, EventArgs e) {
             Inject();
 
         }
-
-        private void LoadDllFileToolStripMenuItem_Click(object sender, EventArgs e)
-        {
+        // 托盘右键菜单，加载按钮事件
+        private void LoadDllFileToolStripMenuItem_Click(object sender, EventArgs e) {
             button2_Click(null, null);
         }
-
-        private void UnInjectToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (MessageBox.Show("是否要从目标进程中卸载该dll", "", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) == DialogResult.OK)
-            {
+        // 托盘右键菜单，卸载按钮事件
+        private void UnInjectToolStripMenuItem_Click(object sender, EventArgs e) {
+            if (MessageBox.Show("是否要从目标进程中卸载该dll", "", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) == DialogResult.OK) {
                 UnInject();
             }
         }
-
-        private void ExitToolStripMenuItem_Click(object sender, EventArgs e)
-        {
+        // 托盘右键菜单，退出按钮事件
+        private void ExitToolStripMenuItem_Click(object sender, EventArgs e) {
             Application.Exit();
         }
-
-        protected override void WndProc(ref Message m)
-        {
-            if(m.WParam.ToInt64() == 0xF020)                //最小化
+        // 点击最小化时的事件
+        protected override void WndProc(ref Message m) {
+            if (m.WParam.ToInt64() == 0xF020)                //最小化
             {
                 this.Hide();
                 return;
@@ -411,20 +398,25 @@ namespace DLLInject
         }
 
         //点击托盘图标
-        private void notifyIcon1_Click(object sender, EventArgs e)
-        {
+        private void notifyIcon1_Click(object sender, EventArgs e) {
             var Mouseevent = (MouseEventArgs)e;
-            if(Mouseevent.Button == MouseButtons.Left)
-            {
-                if (this.Visible)
-                {
+            if (Mouseevent.Button == MouseButtons.Left) {
+                if (this.Visible) {
                     this.Hide();
-                }
-                else
-                {
+                } else {
                     this.Show();
                 }
             }
+        }
+
+        /// <summary>
+        /// 当下拉列表的值更改时触发
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void combo_box_dll_lists_SelectedIndexChanged(object sender, EventArgs e) {
+            label1.Text = dll_lists[combo_box_dll_lists.SelectedIndex].FilePath;
+            config.Write(Application.ExecutablePath, "CurrentSelect", combo_box_dll_lists.SelectedIndex.ToString());
         }
     }
 }
